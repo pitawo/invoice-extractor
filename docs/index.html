@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>請求書・注文書の読み取りと一覧化（デモ）</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>請求書・注文書の読み取りと一覧化</h1>
+  <p class="lead">書類から日付・取引先・品目・金額を読み取った結果を、人が確認・修正して、CSV に書き出すところまでの画面です。</p>
+</header>
+
+<main>
+  <p id="demo-note" class="note" hidden>
+    このデモの読み取り結果は、同梱のプロンプト（<code>prompts/extract_prompt.md</code>）と同じ指示で<strong>事前に処理したもの</strong>です。
+    この画面から API は呼びません。書類はすべて架空のサンプルです。
+  </p>
+
+  <section class="app" aria-label="確認・修正画面">
+    <nav id="list" aria-label="書類の一覧"></nav>
+    <div id="detail"></div>
+  </section>
+
+  <section class="panel" aria-label="書き出し">
+    <h2>書き出し</h2>
+    <p class="help">各書類の数字が合っているかは、画面が自動で突き合わせます（明細の合計＝小計、小計＋消費税＝合計、数量×単価＝金額）。合わない書類は「要確認」のまま書き出されます。</p>
+    <div class="row">
+      <label for="self-name">自社名（取引先の列を決めるために使います）</label>
+      <input id="self-name" type="text" value="デモ販売株式会社" autocomplete="off">
+    </div>
+    <div class="row">
+      <button id="dl-csv" type="button">CSV をダウンロード</button>
+      <button id="copy-tsv" type="button">表計算に貼り付ける形でコピー</button>
+      <span id="export-status" role="status"></span>
+    </div>
+    <p class="help">CSV は UTF-8（BOM 付き）で、1明細＝1行です。小計・消費税・合計は書類の最初の行にだけ入ります。編集した内容はこのタブの中だけにあり、再読み込みで元に戻ります。</p>
+  </section>
+
+  <section class="panel" id="safety" aria-label="安全性の確かめ方">
+    <h2>安全性の確かめ方（1分でできます）</h2>
+    <p>「保存していません」と書くだけでは証明にならないので、<strong>ブラウザ自身が、このページから外への通信を禁止している</strong>状態にしています。次の3つを、ご自分で確かめてください。</p>
+    <ol class="steps">
+      <li><strong>ページのソースを見る。</strong> このページで右クリック →「ページのソースを表示」。<code>&lt;head&gt;</code> の先頭付近（文字コード指定の直後）に、下の <code>Content-Security-Policy</code>（ブラウザに「このページは外へデータを送ってはいけない」と守らせる設定）があります。CSP より前に外部の読み込みはありません。<code>connect-src 'none'</code> は、スクリプトからの通信（fetch・XHR・WebSocket など）を許可しない指定です。画像や外部ファイルの読み込みは、同じ設定内の他の項目で止めています。リンクのクリックによる移動は対象外です。</li>
+      <li><strong>開発者ツールの Network タブを見る。</strong> F12 → Network を開いてページを再読み込みすると、表示されるのはこのサイト自身のファイル（HTML・CSS・JS・画像）だけです。外部ドメインへの通信は 0 件です。</li>
+      <li><strong>キーの入力欄が無いことを見る。</strong> このページの入力欄は、書類の項目（日付・取引先・金額など）と「自社名」だけです。API キーやパスワードを入れる欄は無く、API を呼ぶコードも含まれていません（<code>app.js</code>・<code>lib.js</code> は誰でも読める長さです）。外への通信を試みるのは、下の「わざと試す」ボタン（<code>csp-probe.js</code>）だけで、データは何も載せません。</li>
+    </ol>
+    <p class="help">このページに効いている設定（この画面が自分自身のソースから読み出しています）：</p>
+    <pre id="csp-text" class="code"></pre>
+    <div class="row">
+      <button id="try-net" type="button">わざと外部への通信を試す</button>
+      <span id="try-net-result" role="status"></span>
+    </div>
+    <p class="help">ボタンを押すと、ページ自身が外部サイトへの通信を試みます。ブラウザが止めれば「ブロックされました」と出ます（Chrome／Edge では、Network タブに <code>blocked:csp</code> と表示され、実際には外に出ません）。</p>
+    <details>
+      <summary>この方法でできないこと</summary>
+      <ul>
+        <li>このページ自体を GitHub Pages から取得する通信は、当然あります（サーバー側のアクセスログはここでは制御できません）。確かめられるのは「ページを開いたあと、入力・編集した内容が外へ出ないこと」です。</li>
+        <li>GitHub Pages は HTTP ヘッダを設定できないため、CSP は <code>&lt;meta&gt;</code> で指定しています。<code>&lt;meta&gt;</code> 版は、それより前に読み込まれたものには効きません（このページでは先頭に置き、外部読み込みも無いので該当しません）。リンクをクリックしての画面遷移も対象外のため、このページには外部リンクを置いていません。</li>
+        <li>ブラウザ拡張機能や、ページを保存して書き換えた場合は別の話になります。</li>
+      </ul>
+    </details>
+  </section>
+</main>
+
+<script src="data.js"></script>
+<script src="lib.js"></script>
+<script src="app.js"></script>
+<script src="csp-probe.js"></script>
+</body>
+</html>
